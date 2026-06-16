@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="description" content="Girls Frontline 2 - Operative Database with real-time data from the community spreadsheet" />
+    <title>GFL2 Database</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div class="background">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+    </div>
+
+    <div id="app">
+      <header id="header" class="header">
+        <h1 class="header-title">Girls' Frontline 2: Exilium Info Sheet</h1>
+        <div id="banner-section" class="banner-section" style="display: none;">
+          <h2 class="banner-title">Actual Banner</h2>
+          <div class="banner-cards-container">
+            <div class="banner-card-wrapper">
+              <div class="banner-region">CN</div>
+              <div id="banner-cn-card" class="banner-grid-inner"></div>
+            </div>
+            <div class="banner-card-wrapper">
+              <div class="banner-region">Global</div>
+              <div id="banner-global-card" class="banner-grid-inner"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div id="announcement-banner" class="announcement-banner" style="display: none;"></div>
+        
+        <div id="search-container" class="search-container">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="search-input" placeholder="Search Dolls..." autocomplete="off">
+        </div>
+      </header>
+
+      <main id="page-content">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Syncing data from spreadsheet...</p>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <p>Data fetched live from the <a href="https://docs.google.com/spreadsheets/d/1DogyU3K7ZXw2qbhP1EhRXIAw5nCyIV5G5e-QWviBZME" target="_blank" rel="noopener">GFL2 Official Release Info Compilation</a> spreadsheet.</p>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
