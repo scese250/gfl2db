@@ -12,6 +12,7 @@
     "vite": "^8.0.12"
   },
   "dependencies": {
-    "papaparse": "^5.5.3"
+    "papaparse": "^5.5.3",
+    "puppeteer": "^25.3.0"
   }
 }

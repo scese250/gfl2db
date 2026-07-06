@@ -1,4 +1,5 @@
 import './style.css';
+import backgrounds from './backgrounds.json';
 
 const SPREADSHEET_ID = '1DogyU3K7ZXw2qbhP1EhRXIAw5nCyIV5G5e-QWviBZME';
 const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}`;
@@ -44,6 +45,15 @@ window.addEventListener('hashchange', () => render());
 // === INIT ===
 async function init() {
   try {
+    // Set random background
+    if (backgrounds && backgrounds.length > 0) {
+      const randomUrl = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+      const bgEl = document.querySelector('.background');
+      if (bgEl) {
+        bgEl.style.backgroundImage = `url("${randomUrl}")`;
+      }
+    }
+
     const sheetListData = await fetchSheetList();
     allCharacters = sheetListData.filter(item => !EXCLUDED_TABS.includes(item.name));
 
