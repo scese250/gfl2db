@@ -6,6 +6,8 @@ const EXCLUDED_TABS = ['Home', 'Quick Links', 'FAQ', 'Weapons', 'Jiangyu(old)'];
 
 let allCharacters = [];
 let imageCache = {};
+let currentBannerCN = null;
+let currentBannerGlobal = null;
 
 function proxySheetUrl(originalUrl) {
   return `/api/sheet-proxy?url=${encodeURIComponent(originalUrl)}`;
@@ -50,6 +52,9 @@ async function init() {
     if (homeSheet) {
       fetchAnnouncement(homeSheet.gid);
     }
+    
+    // Fetch the banner characters from the Quick Links tab (gid=331249341)
+    fetchBannerData('331249341');
 
     // Start loading portraits in background
     loadAllPortraits(allCharacters);
@@ -85,26 +90,124 @@ async function fetchAnnouncement(gid) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     const table = tempDiv.querySelector('table');
-    
-    if (table) {
-      const tds = table.querySelectorAll('td');
-      for (const td of tds) {
-        const text = td.textContent.trim();
-        // The first cell with actual text is the banner
-        if (text.length > 5 && text.length < 100) {
+
+    if (!table) return;
+
+    // Build a grid to resolve merged cells for the announcement
+    const grid = [];
+    const rows = table.querySelectorAll('tr');
+    rows.forEach((row, rIdx) => {
+      if (!grid[rIdx]) grid[rIdx] = [];
+      const cells = row.querySelectorAll('td');
+      let cOffset = 0;
+      cells.forEach(cell => {
+        while (grid[rIdx][cOffset] !== undefined) cOffset++;
+        const rs = cell.rowSpan || 1;
+        const cs = cell.colSpan || 1;
+        const text = cell.textContent.trim();
+        for (let r = 0; r < rs; r++) {
+          if (!grid[rIdx + r]) grid[rIdx + r] = [];
+          for (let c = 0; c < cs; c++) {
+            grid[rIdx + r][cOffset + c] = text;
+          }
+        }
+        cOffset += cs;
+      });
+    });
+
+    // Announcement: first non-empty cell in first few rows
+    for (let r = 0; r < Math.min(6, grid.length); r++) {
+      if (!grid[r]) continue;
+      for (let c = 0; c < grid[r].length; c++) {
+        const text = grid[r][c];
+        if (text && text.length > 5 && text.length < 100) {
           const bannerEl = document.getElementById('announcement-banner');
           if (bannerEl) {
             bannerEl.textContent = text;
-            if (getRoute().page === 'home') {
-              bannerEl.style.display = 'block';
-            }
+            if (getRoute().page === 'home') bannerEl.style.display = 'block';
           }
-          break;
+          return; // Fix: Stop scanning entirely once we found the announcement
         }
       }
     }
   } catch (err) {
-    console.warn('Failed to fetch announcement banner:', err);
+    console.warn('Failed to fetch announcement:', err);
+  }
+}
+
+async function fetchBannerData(gid) {
+  try {
+    const url = proxySheetUrl(`${BASE_URL}/htmlview/sheet?headers=false&gid=${gid}`);
+    const response = await fetch(url);
+    const html = await response.text();
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    const table = tempDiv.querySelector('table');
+
+    if (!table) return;
+
+    // Banner characters: scan anchor tags in the table that link to character sheets (#gid=...)
+    // The first such link in the CN column region maps to the CN banner character.
+    // The second such link maps to the EN/Global banner character.
+    let bannerCNGid = null;
+    let bannerGlobalGid = null;
+
+    const anchors = table.querySelectorAll('a[href^="#gid="]');
+    for (const a of anchors) {
+      const hrefGid = a.getAttribute('href').replace('#gid=', '').trim();
+      const td = a.closest('td');
+      if (!td) continue;
+      const tr = td.closest('tr');
+      if (!tr) continue;
+
+      // Get the column index of this cell in the physical row
+      const cells = Array.from(tr.querySelectorAll('th, td'));
+      const cellIdx = cells.indexOf(td);
+
+      // CN side is columns 0-6 (physical cell index), EN side is columns 7+
+      if (cellIdx <= 6 && !bannerCNGid) {
+        bannerCNGid = hrefGid;
+      } else if (cellIdx > 6 && !bannerGlobalGid) {
+        bannerGlobalGid = hrefGid;
+      }
+      if (bannerCNGid && bannerGlobalGid) break;
+    }
+
+    if (bannerCNGid) {
+      const cnChar = allCharacters.find(c => c.gid === bannerCNGid);
+      if (cnChar) currentBannerCN = cnChar.name;
+    }
+    if (bannerGlobalGid) {
+      const globalChar = allCharacters.find(c => c.gid === bannerGlobalGid);
+      if (globalChar) currentBannerGlobal = globalChar.name;
+    }
+
+    // Re-render banner cards if home page is already rendered
+    updateBannerCards();
+  } catch (err) {
+    console.warn('Failed to fetch banner data:', err);
+  }
+}
+
+function updateBannerCards() {
+  const bannerCNCard = document.getElementById('banner-cn-card');
+  const bannerGlobalCard = document.getElementById('banner-global-card');
+  if (!bannerCNCard || !bannerGlobalCard) return;
+
+  if (currentBannerCN) {
+    const cnChar = allCharacters.find(c => c.name === currentBannerCN);
+    if (cnChar) {
+      renderGrid([cnChar], bannerCNCard);
+      if (imageCache[cnChar.gid]) updateCardImage(cnChar.gid);
+    }
+  }
+  if (currentBannerGlobal) {
+    const globalChar = allCharacters.find(c => c.name === currentBannerGlobal);
+    if (globalChar) {
+      renderGrid([globalChar], bannerGlobalCard);
+      if (imageCache[globalChar.gid]) updateCardImage(globalChar.gid);
+    }
   }
 }
 
@@ -124,9 +227,14 @@ async function loadPortrait(character) {
     const response = await fetch(url);
     const html = await response.text();
 
-    const imgMatch = html.match(/src="(https:\/\/docs\.google\.com\/sheets-images-rt\/[^"]+)"/);
-    if (imgMatch) {
-      imageCache[character.gid] = proxyImageUrl(imgMatch[1]);
+    const imgMatches = [...html.matchAll(/src="(https:\/\/docs\.google\.com\/sheets-images-rt\/[^"]+)"/g)];
+    if (imgMatches.length > 0) {
+      let selectedImg = imgMatches[0][1];
+      // Special case: OTs-14 has a placeholder image before her actual portrait
+      if (character.name === 'OTs-14' && imgMatches.length > 1) {
+        selectedImg = imgMatches[1][1];
+      }
+      imageCache[character.gid] = proxyImageUrl(selectedImg);
       updateCardImage(character.gid);
     }
   } catch (err) {
@@ -182,23 +290,8 @@ function renderHomePage(container) {
     announcementBanner.style.display = 'block';
   }
 
-  // Render Banner (Faelynn and Basti)
-  const bannerCNCard = document.getElementById('banner-cn-card');
-  const bannerGlobalCard = document.getElementById('banner-global-card');
-  
-  if (bannerCNCard && bannerGlobalCard) {
-    const faelynnChar = allCharacters.find(c => c.name === 'Faelynn');
-    const bastiChar = allCharacters.find(c => c.name === 'Basti');
-
-    if (faelynnChar) renderGrid([faelynnChar], bannerCNCard);
-    if (bastiChar) renderGrid([bastiChar], bannerGlobalCard);
-    
-    // Trigger image load for banner chars
-    ['Faelynn', 'Basti'].forEach(name => {
-      const c = allCharacters.find(ch => ch.name === name);
-      if (c && imageCache[c.gid]) updateCardImage(c.gid);
-    });
-  }
+  // Render Banner (dynamic from Home sheet)
+  updateBannerCards();
 
   container.innerHTML = '<div id="grid" class="character-grid"></div>';
   renderGrid(allCharacters);
