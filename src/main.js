@@ -14,16 +14,14 @@ function proxySheetUrl(originalUrl) {
   return `/api/sheet-proxy?url=${encodeURIComponent(originalUrl)}`;
 }
 
-function proxyImageUrl(originalUrl) {
-  return `/api/image-proxy?url=${encodeURIComponent(originalUrl)}`;
-}
-
-// Replace all Google Sheets image URLs in HTML with proxied versions
+// Add crossorigin="anonymous" to all <img> tags so Google Sheets images
+// are fetched directly from docs.google.com without an image proxy.
+// Google returns Access-Control-Allow-Origin: * on these URLs.
 function proxyAllImages(html) {
-  return html.replace(
-    /https:\/\/docs\.google\.com\/sheets-images-rt\/[^"'\s)]+/g,
-    (match) => proxyImageUrl(match)
-  );
+  return html.replace(/<img\b([^>]*?)>/gi, (match, attrs) => {
+    if (attrs.includes('crossorigin=')) return match;
+    return `<img crossorigin="anonymous"${attrs}>`;
+  });
 }
 
 // === ROUTER ===
@@ -244,7 +242,7 @@ async function loadPortrait(character) {
       if (character.name === 'OTs-14' && imgMatches.length > 1) {
         selectedImg = imgMatches[1][1];
       }
-      imageCache[character.gid] = proxyImageUrl(selectedImg);
+      imageCache[character.gid] = selectedImg; // store raw Google URL, loaded directly with crossorigin
       updateCardImage(character.gid);
     }
   } catch (err) {
@@ -259,6 +257,7 @@ function updateCardImage(gid) {
     if (!placeholder) return;
     const img = document.createElement('img');
     img.src = imageCache[gid];
+    img.crossOrigin = 'anonymous';
     img.loading = 'lazy';
     placeholder.replaceWith(img);
   });
@@ -335,7 +334,7 @@ function renderGrid(characters, targetContainer) {
     const initial = char.name.charAt(0).toUpperCase();
     const cachedImage = imageCache[char.gid];
     const imageContent = cachedImage
-      ? `<img src="${cachedImage}" alt="${char.name}" loading="lazy">`
+      ? `<img src="${cachedImage}" alt="${char.name}" loading="lazy" crossorigin="anonymous">`
       : `<span class="card-image-placeholder">${initial}</span>`;
 
     card.innerHTML = `
@@ -384,7 +383,8 @@ async function renderCharacterPage(container, gid) {
     let html = await response.text();
 
     // Extract the table from the HTML
-    const tableMatch = html.match(/<table[^>]*class="waffle"[^>]*>[\s\S]*?<\/table>/i);
+    // Google now outputs class="waffle grid-minimized" so we match any class containing "waffle"
+    const tableMatch = html.match(/<table[^>]*class="[^"]*waffle[^"]*"[^>]*>[\s\S]*?<\/table>/i);
     if (!tableMatch) {
       document.getElementById('sheet-content').innerHTML =
         '<div class="error-message">Could not parse sheet data.</div>';
